@@ -9,8 +9,7 @@ class Artist():
     def __hash__(self):
         return hash(self.ArtistId)
 
-    def __str__(self, other):
+    def __eq__(self, other):
         return self.ArtistId == other.ArtistId
 
-    def __str__(self):
-        return f"{self.Name} - ({self.ArtistId}"
+
