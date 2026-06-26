@@ -7,67 +7,71 @@ class Controller:
         self._view = view
         # the model, which implements the logic of the program and holds the data
         self._model = model
-        self._choicePartenza = None
-        self._choiceArtista = None
 
     def fillDDGenre(self):
-        genre = self._model.getAllGenre()
-        for g in genre:
+        genres = self._model.getAllGenres()
+
+        for genre in genres:
             self._view._ddGenre.options.append(
                 ft.dropdown.Option(
-                    data= g,  # Oggetto che stiamo inserendo
-                    key= g.Name,  # Cosa verrà visualizzato
-                    on_click=self._choiceDdPartenza, # Metodo che viene chiamato quando selezioniamo ciascuna voce ddel dropdown
+                    key = genre.GenreId,
+                    text = genre.Name,
                 )
             )
 
-    def _choiceDdPartenza(self, e):
-        self._choicePartenza = e.control.data
-        print(f"Hai selezionato '{self._choicePartenza.Name}' come genre.")
-        self.fillDDArtist()
 
     def handleCreaGrafo(self, e):
-        topI, top5 = self._model.buildGraph(self._choicePartenza.GenreId)
-        nodes, edges = self._model.getGraphDetails()
-        self._view.txt_result.controls.clear()
-        self._view.txt_result.controls.append(
-            ft.Text(f"Grafo creato correttamente: {nodes} nodi e {edges} archi")
-        )
-        self._view.txt_result.controls.append(
-            ft.Text(f"Artista più influente: {topI[0]}, con influenza: {topI[1]}")
-        )
-        self._view.txt_result.controls.append(
-            ft.Text(f"Top 5 archi: ")
-        )
-        for a1, a2, data in top5:
+        genreId =  self._view._ddGenre.value
+        if not genreId:
             self._view.txt_result.controls.append(
-                ft.Text(f"{a1.Name} -> {a2.Name}: {data["weight"]}")
+                ft.Text("Selezionare un genre dal menù.", color="red")
+            )
+            self._view.update_page()
+            return
+        self._model.buildGraph(genreId)
+        nodes, edges = self._model.getGraphDetails()
+        self._view.txt_result.controls.append(
+            ft.Text(f"Grafo creato\nNumero di nodi: {len(nodes)}\nNumero di archi: {len(edges)}")
+        )
+        mostInfluent = self._model.getMostInfluent()
+        self._view.txt_result.controls.append(
+            ft.Text(f"Artistista più influente {mostInfluent[0]} con influenza: {mostInfluent[1]}")
+        )
+        self._view.txt_result.controls.append(
+            ft.Text(f"ATop 5 archi:")
+        )
+        bestEdges = self._model.bestEdges()
+        for u, v, data in bestEdges:
+            self._view.txt_result.controls.append(
+                ft.Text(f"{u} --> {v} | peso: {data['weight']}")
             )
 
         self._view._ddArtist.disabled = False
+        for node in nodes:
+            self._view._ddArtist.options.append(
+                ft.dropdown.Option(
+                    key=node.ArtistId,
+                    text=node.Name,
+                )
+            )
         self._view.update_page()
 
 
-    def fillDDArtist(self):
-        for a in self._model.getAllArtists(self._choicePartenza.GenreId):
-            self._view._ddArtist.options.append(
-                ft.dropdown.Option(
-                    data= a,  # Oggetto che stiamo inserendo
-                    key= a.Name,  # Cosa verrà visualizzato
-                    on_click=self._choiceDdArtista, # Metodo che viene chiamato quando selezioniamo ciascuna voce ddel dropdown
-                )
-            )
-
-    def _choiceDdArtista(self, e):
-        self._choiceArtista = e.control.data
-        print(f"Hai selezionato '{self._choiceArtista.Name}' come genre.")
-
     def handleCammino(self,e):
-        best_percorso = self._model.getPercorso(self._choiceArtista)
-        self._view.txt_result.controls.clear()
+        start_id = self._view._ddArtist.value
+        if not start_id:
+            self._view.txt_result.controls.append(
+                ft.Text("Selezionare un artista dal menù.", color="red")
+            )
+            self._view.update_page()
+            return
+
+        bestpath = self._model.handlePath(start_id)
         self._view.txt_result.controls.append(
-            ft.Text(f"Il miglior percorso da {self._choiceArtista.Name} è:  ")
+            ft.Text(f"Cammino di lunghezza massima  trovato con lunghezza {len(bestpath)}: ")
         )
-        testo = " -> ".join(a.Name for a in best_percorso)
-        self._view.txt_result.controls.append(ft.Text(testo))
+        for node in bestpath:
+            self._view.txt_result.controls.append(
+                ft.Text(node)
+            )
         self._view.update_page()

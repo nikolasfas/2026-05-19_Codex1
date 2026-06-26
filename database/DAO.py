@@ -10,7 +10,8 @@ class DAO():
         cursor = conn.cursor(dictionary=True)
 
         query = """select *
-                    from genre g  """
+                    from genre g  
+                    order by Name asc"""
 
         cursor.execute(query)
         res = []
@@ -22,16 +23,17 @@ class DAO():
         return res
 
     @staticmethod
-    def getArtistByGenre(genre):
+    def getArtists(genreId):
         conn = DBConnect.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        query = """select distinct a2.ArtistId , a2.Name  
-                    from track t, album a, artist a2 
-                    where t.AlbumId = a.AlbumId and a.ArtistId = a2.ArtistId
+        query = """select distinct a.ArtistId , a.Name 
+                    from artist a , album a2 , track t 
+                    where a.ArtistId = a2.ArtistId  
+                    and t.AlbumId = a2.AlbumId 
                     and t.GenreId = %s"""
 
-        cursor.execute(query, (genre, ))
+        cursor.execute(query, (genreId,))
         res = []
         for row in cursor:
             res.append(Artist(**row))
@@ -41,56 +43,37 @@ class DAO():
         return res
 
     @staticmethod
-    def getAllEdges(genre, idMap):
+    def getConnections(genreId):
         conn = DBConnect.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        query = """with popularity as (
-                select a.ArtistId, sum(i2.Quantity) as pop
-                from invoice i, invoiceline i2, track t, album a
-                where i.InvoiceId = i2.InvoiceId
-                and i2.TrackId = t.TrackId
-                and t.AlbumId = a.AlbumId
-                and t.GenreId = %s
-                group by a.ArtistId
-                            ),
-                sales as (
-                                select distinct i.CustomerId, a.ArtistId
-                                from invoice i, invoiceline i2, track t, album a
-                                where i.InvoiceId = i2.InvoiceId
-                                and i2.TrackId = t.TrackId
-                                and t.AlbumId = a.AlbumId
-                                and t.GenreId = %s
-                            )
-                select distinct 
-                    s.ArtistId as a1,
-                    s1.ArtistId as a2,
-                    p1.pop as pop1,
-                    p2.pop as pop2,
-                    p1.pop + p2.pop as peso
-                from sales s, sales s1, popularity p1, popularity p2
-                where s.CustomerId = s1.CustomerId
-                and s.ArtistId < s1.ArtistId
-                and s.ArtistId = p1.ArtistId
-                and s1.ArtistId = p2.ArtistId
-                """
+        query = """with links as(
+                    select i.TrackId , i.Quantity , i2.CustomerId , a.ArtistId 
+                    from invoiceline i , invoice i2 , track t , album a
+                    where i.InvoiceId = i2.InvoiceId 
+                    and i.TrackId = t.TrackId 
+                    and t.AlbumId = a.AlbumId 
+                    and t.GenreId = %s),
+                    popularity as (
+                    select a.ArtistId , sum(i.Quantity)as pop
+                    from track t , album a , invoiceline i 
+                    where t.TrackId = i.TrackId 
+                    and a.AlbumId = t.AlbumId 
+                    and t.GenreId = %s
+                    group by a.ArtistId
+                    )
+                    select distinct l1.ArtistId as a1, p.pop as pop1, l2.ArtistId as a2, p2.pop as pop2
+                    from links l1, links l2, popularity p , popularity p2
+                    where l1.CustomerId = l2.CustomerId
+                    and l1.ArtistId < l2.ArtistId
+                    and l1.ArtistId = p.ArtistId
+                    and l2.ArtistId = p2.ArtistId"""
 
-        cursor.execute(query, (genre, genre, ))
+        cursor.execute(query, (genreId, genreId,))
         res = []
         for row in cursor:
-            a1 = idMap[row["a1"]]
-            a2 = idMap[row["a2"]]
-            peso = row["peso"]
-
-            if row["pop1"] > row["pop2"]:
-                res.append((a1, a2, peso))
-            elif row["pop2"] > row["pop1"]:
-                res.append((a2, a1, peso))
-            else:
-                res.append((a1, a2, peso))
-                res.append((a2, a1, peso))
+            res.append((row["a1"], row["pop1"], row["a2"], row["pop2"]))
 
         cursor.close()
         conn.close()
         return res
-

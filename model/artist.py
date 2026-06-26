@@ -12,4 +12,7 @@ class Artist():
     def __eq__(self, other):
         return self.ArtistId == other.ArtistId
 
+    def __str__(self):
+        return self.Name
+
 

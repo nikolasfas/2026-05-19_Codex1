@@ -8,80 +8,95 @@ from database.DAO import DAO
 class Model:
     def __init__(self):
         self._graph = nx.DiGraph()
-        self._genre = None
-        self._artists = None
-        self._sales = None
-        self._idMap = {}
+        self._idMapA = {}
 
-    def getAllGenre(self):
-        self._genre = DAO.getAllGenre()
-        return self._genre
+    def handlePath(self, start_id):
 
-    def getAllArtists(self, genre):
-        return DAO.getArtistByGenre(genre)
+        start = self._idMapA[int(start_id)]
 
-
-    def buildGraph(self, genre):
-        self._artists = DAO.getArtistByGenre(genre)
-
-        for a in self._artists:
-            self._idMap[a.ArtistId] = a
-
-        self._graph.add_nodes_from(self._artists)
-        self._sales = DAO.getAllEdges(genre, self._idMap)
-
-        for a1, a2, peso in self._sales:
-            self._graph.add_edge(a1, a2, weight=peso)
-
-        influenza = None
-        top_infl = None
-
-        for n in self._graph.nodes:
-            peso_uscenti = 0
-            peso_entranti = 0
-
-            for u, v, data in self._graph.out_edges(n, data=True):
-                peso_uscenti += data["weight"]
-
-            for u, v, data in self._graph.in_edges(n, data=True):
-                peso_entranti += data["weight"]
-
-            infl_n = peso_uscenti - peso_entranti
-
-            if influenza is None or infl_n > influenza:
-                influenza = infl_n
-                top_infl = n
-
-        top_influenza = (top_infl.Name, influenza)
-
-        archi = list(self._graph.edges(data=True))
-        archi.sort(key = lambda x: x[2]["weight"], reverse = True)
-        top_5 = archi[:5]
-
-        return top_influenza, top_5
-
-    def getPercorso(self, artist):
         self._bestPath = []
-        self._ricorsione([artist], 0)
+        parziale = [start]
+
+        self._ricorsione(parziale, 0)
+
         return self._bestPath
 
-    def _ricorsione(self, parziale, peso_precedente):
-        current = parziale[-1]
+    def _ricorsione(self, parziale, currentValue):
+        print(parziale ,  currentValue)
 
         if len(parziale) > len(self._bestPath):
             self._bestPath = copy.deepcopy(parziale)
 
-        for vicino in self._graph.successors(current):
-            if vicino not in parziale:
-                peso = self._graph[current][vicino]["weight"]
+        for n in self._graph.successors(parziale[-1]):
+            if n not in parziale:
+                newValue = self._graph[parziale[-1]][n]['weight']
 
-                if peso > peso_precedente:
-                    parziale.append(vicino)
-                    self._ricorsione(parziale, peso)
+                if newValue > currentValue:
+
+                    parziale.append(n)
+                    self._ricorsione(parziale, newValue)
                     parziale.pop()
 
 
+    def getMostInfluent(self):
 
+        mostInfluenti = []
+
+        for node in self._graph.nodes:
+            pesoE = 0
+            pesoU = 0
+
+            for u, v, data in self._graph.in_edges(node, data=True):
+                pesoE += data['weight']
+            for u, v, data in self._graph.out_edges(node, data=True):
+                pesoU += data['weight']
+
+            influenza = pesoU-pesoE
+            mostInfluenti.append((node, influenza))
+        mostInfluenti.sort(key=lambda x: x[1], reverse=True)
+        mostInfluent = mostInfluenti[0]
+
+        return mostInfluent
+
+    def bestEdges(self):
+
+        edges = list(self._graph.edges(data=True))
+        edges.sort(key=lambda x: x[2]['weight'], reverse=True)
+        bestFive = edges[:5]
+        return bestFive
+
+
+
+    def getAllGenres(self):
+        genres = DAO.getAllGenre()
+        return genres
+
+    def buildGraph(self, genreId):
+        self._graph.clear()
+
+        artists = DAO.getArtists(genreId)
+        for artist in artists:
+            self._idMapA[artist.ArtistId] = artist
+        self._graph.add_nodes_from(artists)
+
+        connections =  DAO.getConnections(genreId)
+        for connection in connections:
+            a1 = self._idMapA[connection[0]]
+            pop1 = int(connection[1])
+            a2 = self._idMapA[connection[2]]
+            pop2 = int(connection[3])
+
+            if a1 in self._graph.nodes and a2 in self._graph.nodes:
+                if pop1 > pop2:
+                    self._graph.add_edge(a1, a2, weight= pop1+pop2)
+                elif pop2 > pop1:
+                    self._graph.add_edge(a2, a1, weight= pop2+pop1)
+                else:
+                    self._graph.add_edge(a1, a2, weight= pop1+pop2)
+                    self._graph.add_edge(a2, a1, weight=pop2 + pop1)
 
     def getGraphDetails(self):
-        return len(self._graph.nodes), len(self._graph.edges)
+        nodes = self._graph.nodes()
+        edges = self._graph.edges()
+        return nodes, edges
+
