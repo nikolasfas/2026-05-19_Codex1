@@ -23,18 +23,20 @@ class View(ft.UserControl):
         self._page.controls.append(self._title)
 
 
-        self._ddGenre = ft.Dropdown(label="Genere", width=250)
-        self._controller.fillDDGenre()
-        self._btnCreaGrafo = ft.ElevatedButton(text="Crea Grafo",
+        self._ddCountry = ft.Dropdown(label="Country", width=250)
+        self._controller.fillDdCountires()
+        self._minGenre = ft.TextField(label="S", hint_text="Insert minimum number of different genre", width=250)
+        self._btnCreaGrafo = ft.ElevatedButton(text="Build graph",
                                                on_click=self._controller.handleCreaGrafo, width=250)
 
-        row1 = ft.Row([self._ddGenre, self._btnCreaGrafo],
+        row1 = ft.Row([self._ddCountry, self._minGenre, self._btnCreaGrafo],
                       alignment=ft.MainAxisAlignment.CENTER)
         self._page.controls.append(row1)
 
-        self._ddArtist = ft.Dropdown(label="Artist", width=250, disabled=True)
+        self._ddClient = ft.Dropdown(label="Client", width=250, disabled=True)
+        self._numEdges = ft.TextField(label="L", hint_text="Insert the number of edges of the path.", width=250)
 
-        self._btnTrovaCammino = ft.ElevatedButton(text="Trova Cammino", on_click=self._controller.handleCammino, width=250)
+        self._btnTrovaCammino = ft.ElevatedButton(text="Find path", on_click=self._controller.handleCammino, width=250)
 
         row2 = ft.Row([self._ddArtist, self._btnTrovaCammino],
                       alignment=ft.MainAxisAlignment.CENTER)

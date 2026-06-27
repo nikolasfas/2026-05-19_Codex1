@@ -1,79 +1,81 @@
 from database.DB_connect import DBConnect
-from model.artist import Artist
-from model.genre import Genre
+from model.customer import Customer
 
 
 class DAO():
     @staticmethod
-    def getAllGenre():
+    def getAllCountries():
         conn = DBConnect.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        query = """select *
-                    from genre g  
-                    order by Name asc"""
+        query = """select distinct Country 
+                    from customer c 
+                    order by Country asc """
 
         cursor.execute(query)
         res = []
         for row in cursor:
-            res.append(Genre(**row))
+            res.append(row["Country"])
 
         cursor.close()
         conn.close()
         return res
 
     @staticmethod
-    def getArtists(genreId):
+    def getAllCustomers(country, S):
         conn = DBConnect.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        query = """select distinct a.ArtistId , a.Name 
-                    from artist a , album a2 , track t 
-                    where a.ArtistId = a2.ArtistId  
-                    and t.AlbumId = a2.AlbumId 
-                    and t.GenreId = %s"""
+        query = """select c.CustomerId , c.FirstName , c.LastName , c.Phone , c.Email
+                    from customer c , invoice i , invoiceline i2 , track t 
+                    where c.CustomerId = i.CustomerId 
+                    and i.InvoiceId = i2.InvoiceId 
+                    and i2.TrackId = t.TrackId 
+                    and c.Country =  %s
+                    group by c.CustomerId 
+                    having count(distinct t.GenreId) >= %s
+                    """
 
-        cursor.execute(query, (genreId,))
+        cursor.execute(query, (country, S,))
         res = []
         for row in cursor:
-            res.append(Artist(**row))
+            res.append(Customer(**row))
 
         cursor.close()
         conn.close()
         return res
 
     @staticmethod
-    def getConnections(genreId):
+    def getAllStats(country, customerTracks, customerGenres):
         conn = DBConnect.get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        query = """with links as(
-                    select i.TrackId , i.Quantity , i2.CustomerId , a.ArtistId 
-                    from invoiceline i , invoice i2 , track t , album a
-                    where i.InvoiceId = i2.InvoiceId 
-                    and i.TrackId = t.TrackId 
+        query = """select distinct c.CustomerId , a.ArtistId , t.GenreId 
+                    from customer c , invoice i , invoiceline i2 , track t , album a 
+                    where c.CustomerId = i.CustomerId 
+                    and i.InvoiceId = i2.InvoiceId 
+                    and i2.TrackId = t.TrackId 
                     and t.AlbumId = a.AlbumId 
-                    and t.GenreId = %s),
-                    popularity as (
-                    select a.ArtistId , sum(i.Quantity)as pop
-                    from track t , album a , invoiceline i 
-                    where t.TrackId = i.TrackId 
-                    and a.AlbumId = t.AlbumId 
-                    and t.GenreId = %s
-                    group by a.ArtistId
-                    )
-                    select distinct l1.ArtistId as a1, p.pop as pop1, l2.ArtistId as a2, p2.pop as pop2
-                    from links l1, links l2, popularity p , popularity p2
-                    where l1.CustomerId = l2.CustomerId
-                    and l1.ArtistId < l2.ArtistId
-                    and l1.ArtistId = p.ArtistId
-                    and l2.ArtistId = p2.ArtistId"""
+                    and c.Country =  %s"""
 
-        cursor.execute(query, (genreId, genreId,))
-        res = []
+        cursor.execute(query, (country,))
+
         for row in cursor:
-            res.append((row["a1"], row["pop1"], row["a2"], row["pop2"]))
+            customerId = row["CustomerId"]
+            artistId = row["ArtistId"]
+            genreId = row["GenreId"]
+
+            if customerId in customerTracks:
+                customerTracks[customerId].append(artistId)
+            else:
+                customerTracks[customerId] = [artistId]
+            if customerId in customerGenres:
+                customerGenres[customerId].append(genreId)
+            else:
+                customerGenres[customerId] = [genreId]
+
 
         cursor.close()
         conn.close()
-        return res
+        return customerTracks, customerGenres
+

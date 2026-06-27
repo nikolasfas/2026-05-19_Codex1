@@ -1,4 +1,5 @@
 import copy
+import math
 
 import networkx as nx
 
@@ -7,96 +8,151 @@ from database.DAO import DAO
 
 class Model:
     def __init__(self):
-        self._graph = nx.DiGraph()
-        self._idMapA = {}
+        self._customers = []
+        self._graph = nx.Graph()
+        self._customersArtists = {}
+        self._customersGenres = {}
+        self._idMapC = {}
 
-    def handlePath(self, start_id):
+    def handlePath(self, start_id, L):
 
-        start = self._idMapA[int(start_id)]
-
-        self._bestPath = []
+        start = self._idMapC[start_id]
         parziale = [start]
+        self._bestPath = []
+        self._bestValue = 0
 
-        self._ricorsione(parziale, 0)
+        self._ricorsione(parziale, L, math.inf, 0)
 
-        return self._bestPath
+        return self._bestPath, self._bestValue
 
-    def _ricorsione(self, parziale, currentValue):
-        print(parziale ,  currentValue)
+    def _ricorsione(self, parziale, L, currentValue, totValue):
 
-        if len(parziale) > len(self._bestPath):
-            self._bestPath = copy.deepcopy(parziale)
+        if len(parziale) == L+1:
+            if totValue > self._bestValue:
+                self._bestValue = totValue
+                self._bestPath = copy.deepcopy(parziale)
 
-        for n in self._graph.successors(parziale[-1]):
-            if n not in parziale:
-                newValue = self._graph[parziale[-1]][n]['weight']
+        if len(parziale) < L+1:
 
-                if newValue > currentValue:
+            for n in self._graph.neighbors(parziale[-1]):
+                if n not in parziale:
+                    newValue = self._graph[parziale[-1]][n]['weight']
 
-                    parziale.append(n)
-                    self._ricorsione(parziale, newValue)
-                    parziale.pop()
+                    if newValue < currentValue:
+
+                        parziale.append(n)
+                        self._ricorsione(parziale, L, newValue, totValue+newValue)
+                        parziale.pop()
+
+    def getCompConn(self):
+
+        compConn = list(nx.connected_components(self._graph))
+        numComp = len(compConn)
+        maxComp = max(compConn, key=len)
+
+        return numComp, maxComp
+
+    def getMAxCompatibility(self):
+
+        nodoConCompa = []
+
+        nodes = list(self._graph.nodes)
+        for n in nodes:
+
+            compa = 0
+            for u, v, data in list(self._graph.edges(n, data=True)):
+                compa += data['weight']
+
+            nodoConCompa.append((n, compa))
+
+        return max(nodoConCompa, key=lambda x:x[1])
 
 
-    def getMostInfluent(self):
-
-        mostInfluenti = []
-
-        for node in self._graph.nodes:
-            pesoE = 0
-            pesoU = 0
-
-            for u, v, data in self._graph.in_edges(node, data=True):
-                pesoE += data['weight']
-            for u, v, data in self._graph.out_edges(node, data=True):
-                pesoU += data['weight']
-
-            influenza = pesoU-pesoE
-            mostInfluenti.append((node, influenza))
-        mostInfluenti.sort(key=lambda x: x[1], reverse=True)
-        mostInfluent = mostInfluenti[0]
-
-        return mostInfluent
-
-    def bestEdges(self):
+    def getHeaviestEdges(self):
 
         edges = list(self._graph.edges(data=True))
         edges.sort(key=lambda x: x[2]['weight'], reverse=True)
         bestFive = edges[:5]
+
         return bestFive
 
 
+    def getCountries(self):
+        countries = DAO.getAllCountries()
+        return countries
 
-    def getAllGenres(self):
-        genres = DAO.getAllGenre()
-        return genres
+    def _calculateCommonArtists(self, n1, n2):
+        commonArtists = set()
+        for artist1 in n1.artists:
+            if artist1 in n2.artists:
+                commonArtists.add(artist1)
 
-    def buildGraph(self, genreId):
+        for artist2 in n2.artists:
+            if artist2 in n1.artists:
+                commonArtists.add(artist2)
+        return len(commonArtists)
+
+    def _calculateCommonGenres(self, n1, n2):
+        commonGenres = set()
+        for genre1 in n1.genres:
+            if genre1 in n2.genres:
+                commonGenres.add(genre1)
+
+        for genre2 in n2.genres:
+            if genre2 in n1.genres:
+                commonGenres.add(genre2)
+
+        return len(commonGenres)
+
+    def buildGraph(self, county, S):
         self._graph.clear()
+        self._customers.clear()
+        self._customersArtists.clear()
+        self._customersGenres.clear()
+        self._idMapC.clear()
 
-        artists = DAO.getArtists(genreId)
-        for artist in artists:
-            self._idMapA[artist.ArtistId] = artist
-        self._graph.add_nodes_from(artists)
+        self._customers = DAO.getAllCustomers(county, S)
+        for customer in self._customers:
+            self._idMapC[customer.CustomerId] = customer
+        self._graph.add_nodes_from(self._customers)
 
-        connections =  DAO.getConnections(genreId)
-        for connection in connections:
-            a1 = self._idMapA[connection[0]]
-            pop1 = int(connection[1])
-            a2 = self._idMapA[connection[2]]
-            pop2 = int(connection[3])
+        self.getAllStats(county)
 
-            if a1 in self._graph.nodes and a2 in self._graph.nodes:
-                if pop1 > pop2:
-                    self._graph.add_edge(a1, a2, weight= pop1+pop2)
-                elif pop2 > pop1:
-                    self._graph.add_edge(a2, a1, weight= pop2+pop1)
-                else:
-                    self._graph.add_edge(a1, a2, weight= pop1+pop2)
-                    self._graph.add_edge(a2, a1, weight=pop2 + pop1)
+        nodes = list(self._graph.nodes)
+
+        for i in range(len(nodes)):
+            for j in range(i+1, len(nodes)):
+
+                n1 = nodes[i]
+                n2 = nodes[j]
+
+                numCA = self._calculateCommonArtists(n1, n2)
+                numCG = self._calculateCommonGenres(n2, n1)
+
+                if numCA >= 1:
+                    self._graph.add_edge(n1, n2, weight=numCA+numCG)
+
+    def getAllStats(self, country):
+
+        self._customersArtists, self._customersGenres = DAO.getAllStats(country, self._customersArtists, self._customersGenres)
+        for stat in self._customersArtists.keys():
+            if stat in self._idMapC:
+                customer1 = self._idMapC[stat]
+                artists = self._customersArtists[stat]
+                if customer1 in self._graph.nodes:
+                    customer1.artists.extend(artists)
+
+        for stat in self._customersGenres.keys():
+            if stat in self._idMapC:
+                customer1 = self._idMapC[stat]
+                genres = self._customersGenres[stat]
+                if customer1 in self._graph.nodes:
+                    customer1.genres.extend(genres)
 
     def getGraphDetails(self):
-        nodes = self._graph.nodes()
-        edges = self._graph.edges()
+        nodes = self._graph.nodes
+        edges = self._graph.edges
         return nodes, edges
+
+
 
